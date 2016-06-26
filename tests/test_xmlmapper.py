@@ -1,18 +1,17 @@
+import six
 from unittest import TestCase
 
-from xmlmapper import XMLMapper
+from xmlmapper import MapperObjectFactory, XMLMapper, XMLMappingSyntaxError
 
-# class TestCase:
-#     pass
 
-class JsonDumpFactory:
-    def create(self, obj_type, fields):
-        obj = {'_type': obj_type}
-        for k, v in fields:
-            if isinstance(v, dict) and hasattr(v, '_type'):
-                fields[k] = (v['_type'], v['id'])
+class JsonDumpFactory(MapperObjectFactory):
+    def create(self, object_type, fields):
+        obj = {'_type': object_type}
+        for k, v in six.iteritems(fields):
+            if isinstance(v, dict) and '_type' in v:
+                obj[k] = (v['_type'], v['id'])
             else:
-                fields[k] = v
+                obj[k] = v
         return obj
 
 
@@ -20,6 +19,30 @@ class XMLMapperTestCase(TestCase):
     def load(self, mapping, xml):
         mapper = XMLMapper(mapping)
         return mapper.load(xml, JsonDumpFactory())
+
+
+class TestMappingSyntaxErrors(XMLMapperTestCase):
+    def test_mapping_syntax_attribute_errors(self):
+        with six.assertRaisesRegex(
+                self, XMLMappingSyntaxError, 'required "_type"'):
+            XMLMapper([{'_match': '/a'}])
+        with six.assertRaisesRegex(
+                self, XMLMappingSyntaxError, 'required "_match"'):
+            XMLMapper([{'_type': 'a', 'a': 'b'}])
+        with six.assertRaisesRegex(
+                self, XMLMappingSyntaxError, 'Duplicate mapping type'):
+            XMLMapper([
+                {'_type': 'a', '_match': 'a'},
+                {'_type': 'a', '_match': 'b'},
+            ])
+
+    def test_mapping_syntax_value_errors(self):
+        with six.assertRaisesRegex(
+                self, XMLMappingSyntaxError, '"_type" should be a string'):
+            XMLMapper([{'_type': 12, '_match': 'a'}])
+        # with six.assertRaisesRegex(
+        #         self, MappingSyntaxError, '"Invalid query type"'):
+        #     XMLMapper([{'_type': 'a', '_match': 123}])
 
 
 class TestValueTypes(XMLMapperTestCase):
@@ -37,7 +60,10 @@ class TestValueTypes(XMLMapperTestCase):
         data = mapper.load(
             xml,
             JsonDumpFactory())
-        assert data == [{'_type': 'a', 'id': 10, 'n': 123}]
+        self.assertEqual(
+            [{'_type': 'a', 'id': 10, 'n': 123,
+              'no_attr': None, 'no_el': None}],
+            data)
 
     def test_value_type_string(self):
         data = self.load(
@@ -59,73 +85,43 @@ class TestValueTypes(XMLMapperTestCase):
 
 class TestManyToManyRelations(XMLMapperTestCase):
     XML = """
-        <alist>
-            <a id="10"></a>
-            <a id="11"></a>
-        </alist>
-        <blist>
-            <b id="20">
-                <aref aid="10"></aref>
-                <aref aid="11"></aref>
-            </b>
-            <b id="21">
-            </b>
-            <b id="22">
-                <aref aid="11"></aref>
-            </b>
-        </blist>
+        <root>
+            <alist>
+                <a id="10"></a>
+                <a id="11"></a>
+            </alist>
+            <blist>
+                <b id="20">
+                    <aref aid="10"></aref>
+                    <aref aid="11"></aref>
+                </b>
+                <b id="21">
+                </b>
+                <b id="22">
+                    <aref aid="11"></aref>
+                </b>
+            </blist>
+        </root>
     """
-
-    def test_m2m_nested(self):
-        data = self.load(
-            [{
-                '_type': 'a',
-                '_match': 'alist/a',
-                '_id': '@id',
-                'id': '@id',
-            }, {
-                '_type': 'b',
-                '_match': 'blist/b',
-                '_id': '@id',
-                'id': '@id',
-                '_a': {
-                    '_type': 'ab',
-                    '_match': 'aref',
-                    'a': 'a: @aid',
-                    'b': 'b: ../@id',
-                }
-            }],
-            self.XML
-        )
-        self.assertEqual(
-            [
-                {'_type': 'a', 'id': 10},
-                {'_type': 'a', 'id': 11},
-                {'_type': 'b', 'id': 20},
-                {'_type': 'b', 'id': 21},
-                {'_type': 'b', 'id': 22},
-                {'_type': 'ab', 'a': ('a', 21), 'b': ('b', 22)},
-                {'_type': 'ab', 'b': ('a', 22), 'b': ('b', 22)},
-            ],
-            data)
 
     def test_m2m_separate(self):
         data = self.load(
             [
                 {
                     '_type': 'a',
-                    '_match': 'alist/a',
+                    '_match': '/root/alist/a',
                     '_id': '@id',
-                    'id': '@id',
+                    'id': 'int: @id',
                 },
                 {
                     '_type': 'b',
-                    '_match': 'blist/b',
+                    '_match': '/root/blist/b',
                     '_id': '@id',
-                    'id': '@id',
+                    'id': 'int: @id',
                 },
                 {
-                    '_match': 'b/aref',
+                    '_type': 'ab',
+                    '_match': '/root/blist/b/aref',
                     'a': 'a: @aid',
                     'b': 'b: ../@id',
                 }
@@ -139,8 +135,9 @@ class TestManyToManyRelations(XMLMapperTestCase):
                 {'_type': 'b', 'id': 20},
                 {'_type': 'b', 'id': 21},
                 {'_type': 'b', 'id': 22},
-                {'_type': 'ab', 'a': ('a', 21), 'b': ('b', 22)},
-                {'_type': 'ab', 'b': ('a', 22), 'b': ('b', 22)},
+                {'_type': 'ab', 'a': ('a', 10), 'b': ('b', 20)},
+                {'_type': 'ab', 'a': ('a', 11), 'b': ('b', 20)},
+                {'_type': 'ab', 'a': ('a', 11), 'b': ('b', 22)},
             ],
             data)
 
