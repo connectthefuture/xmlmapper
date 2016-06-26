@@ -195,11 +195,11 @@ class TestNestedMappings(XMLMapperTestCase):
         self.assertEqual(
             [
                 {'_type': 'b', 'id': '20'},
-                {'_type': 'a', 'id': '10', 'b': ('b', '20')},
+                {'_type': 'a', 'id': '10', 'b': [('b', '20')]},
                 {'_type': 'b', 'id': '21'},
                 {'_type': 'b', 'id': '22'},
                 {'_type': 'a', 'id': '11', 'b': [('b', '21'), ('b', '22')]},
-                {'_type': 'a', 'id': '12', 'b': None},
+                {'_type': 'a', 'id': '12', 'b': []},
             ],
             data)
 

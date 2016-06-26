@@ -285,8 +285,4 @@ class XMLMapper:
                 state.add_object(
                     match_el, mapping.mapping_type, internal_data['_id'], obj)
 
-        if not objects:
-            return None
-        elif len(objects) == 1:
-            return objects[0]
         return objects
