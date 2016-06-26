@@ -1,7 +1,8 @@
 import six
 from unittest import TestCase
 
-from xmlmapper import MapperObjectFactory, XMLMapper, XMLMappingSyntaxError
+from xmlmapper import MapperObjectFactory, XMLMapper, XMLMapperSyntaxError, \
+    XMLMapperLoadingError
 
 
 class JsonDumpFactory(MapperObjectFactory):
@@ -21,28 +22,113 @@ class XMLMapperTestCase(TestCase):
         return mapper.load(xml, JsonDumpFactory())
 
 
-class TestMappingSyntaxErrors(XMLMapperTestCase):
-    def test_mapping_syntax_attribute_errors(self):
+class TestMapperSyntaxErrors(XMLMapperTestCase):
+    def test_mapper_syntax_attribute_errors(self):
         with six.assertRaisesRegex(
-                self, XMLMappingSyntaxError, 'required "_type"'):
+                self, XMLMapperSyntaxError, 'required "_type"'):
             XMLMapper([{'_match': '/a'}])
         with six.assertRaisesRegex(
-                self, XMLMappingSyntaxError, 'required "_match"'):
+                self, XMLMapperSyntaxError, 'required "_match"'):
             XMLMapper([{'_type': 'a', 'a': 'b'}])
         with six.assertRaisesRegex(
-                self, XMLMappingSyntaxError, 'Duplicate mapping type'):
+                self, XMLMapperSyntaxError, 'Duplicate mapping type'):
             XMLMapper([
                 {'_type': 'a', '_match': 'a'},
                 {'_type': 'a', '_match': 'b'},
             ])
 
-    def test_mapping_syntax_value_errors(self):
+    def test_mapper_syntax_value_errors(self):
         with six.assertRaisesRegex(
-                self, XMLMappingSyntaxError, '"_type" should be a string'):
+                self, XMLMapperSyntaxError, '"_type" should be a string'):
             XMLMapper([{'_type': 12, '_match': 'a'}])
         # with six.assertRaisesRegex(
         #         self, MappingSyntaxError, '"Invalid query type"'):
         #     XMLMapper([{'_type': 'a', '_match': 123}])
+
+
+class TestMapperLoadingErrors(XMLMapperTestCase):
+
+    def assert_loading_error(self, mapper, xml, message, tag, line):
+        try:
+            mapper.load(xml, JsonDumpFactory())
+            self.fail('XMLMapperLoadingError not raised')
+        except XMLMapperLoadingError as e:
+            self.assertEqual(e.element_tag, tag)
+            self.assertEqual(e.source_line, line)
+        # except Exception, e:
+        #     raise
+
+    def test_mapper_loading_id_errors(self):
+        mapper = XMLMapper([{
+            '_type': 'a',
+            '_match': '/r/a',
+            '_id': '@id',
+        }])
+
+        self.assert_loading_error(
+            mapper,
+            '<r>\n<a></a></r>',
+            '"_id" is None',
+            'a', 2)
+
+        self.assert_loading_error(
+            mapper,
+            '<r><a id="1"></a><a id="1"></a></r>',
+            'Duplicate object',
+            'a', 1)
+
+    def test_mapper_loading_ref_errors(self):
+        mapper = XMLMapper([
+            {
+                '_type': 'a',
+                '_match': '/r/a',
+                '_id': '@id',
+            }, {
+                '_type': 'b',
+                '_match': '/r/b',
+                'a': 'a: @aid',
+            }
+        ])
+
+        self.assert_loading_error(
+            mapper,
+            '<r>\n<a id="1">\n</a>\n<b aid="2"></b></r>',
+            'Referenced undefined',
+            'b', 4)
+
+    def test_mapper_loading_string_errors(self):
+        mapper = XMLMapper([{
+            '_type': 'a',
+            '_match': '/r/a',
+            '_id': '@id',
+            'b': 'b'
+        }])
+
+        self.assert_loading_error(
+            mapper,
+            '<r><a><b></b><b></b></a></r>',
+            'multiple elements',
+            'a', 1)
+
+    def test_mapper_loading_int_errors(self):
+        mapper = XMLMapper([{
+            '_type': 'a',
+            '_match': '/r/a',
+            '_id': '@id',
+            'b': 'int: b'
+        }])
+
+        self.assert_loading_error(
+            mapper,
+            '<r><a><b></b><b></b></a></r>',
+            'multiple elements',
+            'a', 1)
+
+        self.assert_loading_error(
+            mapper,
+            '<r><a><b>aoeu</b></a></r>',
+            'Invalid literal for int: "aoeu"',
+            'a', 1)
 
 
 class TestValueTypes(XMLMapperTestCase):
@@ -188,7 +274,7 @@ class TestMapperReuse(XMLMapperTestCase):
                 {'_type': 'b', 'a': ('a', '10')}],
             data)
 
-        with self.assertRaises(KeyError):
+        with self.assertRaises(XMLMapperLoadingError):
             mapper.load(
                 '<r><a id="11"></a><b aid="10"></b></r>',
                 JsonDumpFactory())

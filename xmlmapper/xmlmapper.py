@@ -6,14 +6,35 @@ from lxml import etree
 
 
 class XMLMapperError(Exception):
-    u"""Main exception base class for xmlmapper.  All other exceptions inherit
+    """Main exception base class for xmlmapper.  All other exceptions inherit
     from this one."""
     pass
 
 
-class XMLMappingSyntaxError(XMLMapperError, SyntaxError):
-    u"""Error compiling mapping spec."""
+class XMLMapperSyntaxError(XMLMapperError, SyntaxError):
+    """Error compiling mapping spec."""
     pass
+
+
+class XMLMapperLoadingError(XMLMapperError, RuntimeError):
+    """Error during mapping process
+
+    Note:
+        Stores tag and line number of element which attributes
+        were processed, not of the attribute itself.
+
+    Attributes:
+        element_tag (str): XML tag of element
+        source_line (int): Line number of element in xml source
+    """
+
+    def __init__(self, element, message):
+        if element is not None:
+            message += 'In element "{}" line {}.'.format(
+                element.tag, element.sourceline)
+        super(XMLMapperLoadingError, self).__init__(message)
+        self.element_tag = element.tag
+        self.source_line = element.sourceline
 
 
 class MapperObjectFactory:
@@ -50,14 +71,15 @@ class XMLMapper:
             XMLMapper._Query.__init__(self, mapping_type, attr)
             self.value_type, self.xpath = value_type, xpath
 
-        def _get_string(self, xpath_query, value):
+        def _get_string(self, element, xpath_query, value):
             if isinstance(value, list):
                 if len(value) == 0:
                     return None
                 if len(value) > 1:
-                    raise ValueError(
+                    raise XMLMapperLoadingError(
+                        element,
                         'XPath "{}" returned multiple elements while single '
-                        'value was expected.'.format(xpath_query.xpath))
+                        'value was expected.'.format(xpath_query))
                 value = value[0]
                 if hasattr(value, 'text'):
                     value = value.text
@@ -66,15 +88,20 @@ class XMLMapper:
         def run(self, mapper, state, element, object_factory, result):
             value = self.xpath(element)
             if self.value_type == 'string':
-                return self._get_string(self.xpath, value)
+                return self._get_string(element, self.xpath, value)
             elif self.value_type == 'int':
-                str_value = self._get_string(self.xpath, value)
+                str_value = self._get_string(element, self.xpath, value)
                 if str_value is None:
                     return None
-                return int(str_value)
+                try:
+                    return int(str_value)
+                except ValueError:
+                    raise XMLMapperLoadingError(
+                        element,
+                        'Invalid literal for int: {}.'.format(str_value))
             else:
-                obj_id = self._get_string(self.xpath, value)
-                return state.get_object(self.value_type, obj_id)
+                obj_id = self._get_string(element, self.xpath, value)
+                return state.get_object(element, self.value_type, obj_id)
 
     class _MappingQuery(_Query):
         """Mapping query, either primary or nested."""
@@ -86,23 +113,32 @@ class XMLMapper:
             return mapper._load_mapping(element, self, object_factory, result)
 
     class _State:
+        """Stores loaded objects while mapping."""
         def __init__(self):
             self._objects = {}
 
-        def add_object(self, obj_type, obj_id, obj):
+        def add_object(self, element, obj_type, obj_id, obj):
             if obj_id is None:
-                raise TypeError('"_id" is None for type {}'.format(obj_type))
+                raise XMLMapperLoadingError(
+                    element,
+                    '"_id" is None for type "{}".'.format(obj_type))
+
             obj_key = (obj_type, obj_id)
             if obj_key in self._objects:
-                raise ValueError('Duplicate object with id "{}" '
-                                 'for type {}'.format(obj_id, obj_type))
+                raise XMLMapperLoadingError(
+                    element,
+                    'Duplicate object with id "{}" '
+                    'for type "{}"'.format(obj_id, obj_type))
+
             self._objects[obj_key] = obj
 
-        def get_object(self, obj_type, obj_id):
+        def get_object(self, element, obj_type, obj_id):
             obj_key = (obj_type, obj_id)
             if obj_key not in self._objects:
-                raise KeyError('Referenced undefined "{}" object with '
-                               'id "{}"'.format(obj_type, obj_id))
+                raise XMLMapperLoadingError(
+                    element,
+                    'Referenced undefined "{}" object with '
+                    'id "{}".'.format(obj_type, obj_id))
             return self._objects[obj_key]
 
     def __init__(self, mappings):
@@ -118,16 +154,16 @@ class XMLMapper:
         # Parses and compiles mapping spec (dict)
         # Required attributes: _type, _match
         if '_type' not in mapping:
-            raise XMLMappingSyntaxError('Missing required "_type" attribute')
+            raise XMLMapperSyntaxError('Missing required "_type" attribute')
         mtype = mapping['_type']
         if not isinstance(mtype, six.string_types):
-            raise XMLMappingSyntaxError('"_type" should be a string')
+            raise XMLMapperSyntaxError('"_type" should be a string')
         if '_match' not in mapping:
-            raise XMLMappingSyntaxError(
+            raise XMLMapperSyntaxError(
                 'Missing required "_match" attribute '
                 'for type {}'.format(mtype))
         if mtype in self._types:
-            raise XMLMappingSyntaxError(
+            raise XMLMapperSyntaxError(
                 'Duplicate mapping type "{}"'.format(mtype))
 
         match = self._compile_xpath(mapping['_match'])
@@ -145,7 +181,7 @@ class XMLMapper:
             elif isinstance(v, six.string_types):
                 query = self._compile_query(mtype, k, v)
             else:
-                raise XMLMappingSyntaxError(
+                raise XMLMapperSyntaxError(
                     'Invalid query type {} for "{}" attribute '
                     'in type "{}"'.format(type(v), k, mtype))
             compiled.append(query)
@@ -165,7 +201,7 @@ class XMLMapper:
         q_match = self._RX_QUERY.match(query)
 
         if not q_match:
-            raise XMLMappingSyntaxError(
+            raise XMLMapperSyntaxError(
                 'Invalid query format: {}'.format(query))
 
         q_type = q_match.group('type')
@@ -174,17 +210,17 @@ class XMLMapper:
 
         if q_type not in self._VALUE_TYPES:
             if q_type not in self._types:
-                raise XMLMappingSyntaxError(
+                raise XMLMapperSyntaxError(
                     'Unknown value type "{}" for "{}" attribute '
                     'in type "{}"'.format(q_type, attr, mapping_type))
             elif not self._types[q_type].has_id:
-                raise XMLMappingSyntaxError(
+                raise XMLMapperSyntaxError(
                     'Invalid value type "{}" for "{}" attribute '
                     'in type "{}" (only types with "_id" can be '
                     'referenced)'.format(q_type, attr, mapping_type))
 
         if attr == '_id' and q_type != 'string':
-            raise XMLMappingSyntaxError(
+            raise XMLMapperSyntaxError(
                 'In type "{}" attribute "_id" is required '
                 'to be a string.'.format(mapping_type))
 
@@ -230,6 +266,6 @@ class XMLMapper:
             if mapping.has_id:
                 assert '_id' in internal_data
                 state.add_object(
-                    mapping.mapping_type, internal_data['_id'], obj)
+                    element, mapping.mapping_type, internal_data['_id'], obj)
 
             result.append(obj)
