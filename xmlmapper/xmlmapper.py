@@ -4,6 +4,7 @@ from io import BytesIO
 import six
 from lxml import etree
 
+
 class XMLMapperError(Exception):
     u"""Main exception base class for xmlmapper.  All other exceptions inherit
     from this one."""
@@ -62,7 +63,7 @@ class XMLMapper:
                     value = value.text
             return six.text_type(value).strip()
 
-        def run(self, mapper, element, object_factory, result):
+        def run(self, mapper, state, element, object_factory, result):
             value = self.xpath(element)
             if self.value_type == 'string':
                 return self._get_string(self.xpath, value)
@@ -73,11 +74,7 @@ class XMLMapper:
                 return int(str_value)
             else:
                 obj_id = self._get_string(self.xpath, value)
-                obj_key = (self.value_type, obj_id)
-                if obj_key not in mapper.objects:
-                    raise KeyError('Referenced undefined "{}" object with '
-                                   'id "{}"'.format(self.value_type, obj_id))
-                return mapper.objects[obj_key]
+                return state.get_object(self.value_type, obj_id)
 
     class _MappingQuery(_Query):
         """Mapping query, either primary or nested."""
@@ -85,8 +82,28 @@ class XMLMapper:
             XMLMapper._Query.__init__(self, mapping_type, attr)
             self.match, self.has_id, self.compiled = match, has_id, compiled
 
-        def run(self, mapper, element, object_factory, result):
+        def run(self, mapper, state, element, object_factory, result):
             return mapper._load_mapping(element, self, object_factory, result)
+
+    class _State:
+        def __init__(self):
+            self._objects = {}
+
+        def add_object(self, obj_type, obj_id, obj):
+            if obj_id is None:
+                raise TypeError('"_id" is None for type {}'.format(obj_type))
+            obj_key = (obj_type, obj_id)
+            if obj_key in self._objects:
+                raise ValueError('Duplicate object with id "{}" '
+                                 'for type {}'.format(obj_id, obj_type))
+            self._objects[obj_key] = obj
+
+        def get_object(self, obj_type, obj_id):
+            obj_key = (obj_type, obj_id)
+            if obj_key not in self._objects:
+                raise KeyError('Referenced undefined "{}" object with '
+                               'id "{}"'.format(obj_type, obj_id))
+            return self._objects[obj_key]
 
     def __init__(self, mappings):
         """Creates new mapper for provided spec.
@@ -95,7 +112,6 @@ class XMLMapper:
             mappings: List of mapping specs.
         """
         self._types = {}
-        self.objects = {}  # TODO move into separate parsing state
         self._mappings = [self._compile_mapping(None, m) for m in mappings]
 
     def _compile_mapping(self, attr, mapping, parent=None):
@@ -190,18 +206,19 @@ class XMLMapper:
             xml = BytesIO(xml)
         root = etree.parse(xml, parser)
         result = []
+        state = self._State()
         for mapping in self._mappings:
-            self._load_mapping(root, mapping, object_factory, result)
+            self._load_mapping(state, root, mapping, object_factory, result)
         return result
 
-    def _load_mapping(self, element, mapping, object_factory, result):
+    def _load_mapping(self, state, element, mapping, object_factory, result):
         for element in mapping.match(element):
 
             # load attributes
             internal_data = {}
             data = {}
             for query in mapping.compiled:
-                value = query.run(self, element, object_factory, result)
+                value = query.run(self, state, element, object_factory, result)
                 if query.attr.startswith('_'):
                     internal_data[query.attr] = value
                 else:
@@ -209,14 +226,10 @@ class XMLMapper:
 
             obj = object_factory.create(mapping.mapping_type, data)
 
+            # add object to index if necessary
             if mapping.has_id:
-                # add object to index
                 assert '_id' in internal_data
-                obj_id = internal_data['_id']
-                if obj_id is None:
-                    raise TypeError('"_id" is None for type {}'.format(
-                        mapping.mapping_type))
-                obj_key = (mapping.mapping_type, obj_id)
-                self.objects[obj_key] = obj
+                state.add_object(
+                    mapping.mapping_type, internal_data['_id'], obj)
 
             result.append(obj)

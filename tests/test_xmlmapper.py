@@ -142,4 +142,53 @@ class TestManyToManyRelations(XMLMapperTestCase):
             data)
 
 
+class TestMapperReuse(XMLMapperTestCase):
 
+    def test_mapper_reuse(self):
+        mapper = XMLMapper([{
+            '_type': 'a',
+            '_match': '/a',
+            'id': '@id',
+        }])
+
+        data = mapper.load(
+            '<a id="10"></a>',
+            JsonDumpFactory())
+        self.assertEqual(
+            [{'_type': 'a', 'id': '10'}],
+            data)
+
+        data2 = mapper.load(
+            '<a id="11"></a>',
+            JsonDumpFactory())
+        self.assertEqual(
+            [{'_type': 'a', 'id': '11'}],
+            data2)
+
+    def test_mapper_state_reset(self):
+        mapper = XMLMapper([
+            {
+                '_type': 'a',
+                '_match': '/r/a',
+                '_id': '@id',
+                'id': 'string: @id',
+            }, {
+                '_type': 'b',
+                '_match': '/r/b',
+                'a': 'a: @aid',
+            }
+        ])
+
+        data = mapper.load(
+            '<r><a id="10"></a><b aid="10"></b></r>',
+            JsonDumpFactory())
+        self.assertEqual(
+            [
+                {'_type': 'a', 'id': '10'},
+                {'_type': 'b', 'a': ('a', '10')}],
+            data)
+
+        with self.assertRaises(KeyError):
+            mapper.load(
+                '<r><a id="11"></a><b aid="10"></b></r>',
+                JsonDumpFactory())
