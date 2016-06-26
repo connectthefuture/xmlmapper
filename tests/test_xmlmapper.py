@@ -72,13 +72,13 @@ class TestMapperLoadingErrors(XMLMapperTestCase):
 
         self.assert_loading_error(
             mapper,
-            '<r>\n<a></a></r>',
+            b'<r>\n<a></a></r>',
             '"_id" is None',
             'a', 2)
 
         self.assert_loading_error(
             mapper,
-            '<r><a id="1"></a><a id="1"></a></r>',
+            b'<r><a id="1"></a><a id="1"></a></r>',
             'Duplicate object',
             'a', 1)
 
@@ -97,7 +97,7 @@ class TestMapperLoadingErrors(XMLMapperTestCase):
 
         self.assert_loading_error(
             mapper,
-            '<r>\n<a id="1">\n</a>\n<b aid="2"></b></r>',
+            b'<r>\n<a id="1">\n</a>\n<b aid="2"></b></r>',
             'Referenced undefined',
             'b', 4)
 
@@ -111,7 +111,7 @@ class TestMapperLoadingErrors(XMLMapperTestCase):
 
         self.assert_loading_error(
             mapper,
-            '<r><a><b></b><b></b></a></r>',
+            b'<r><a><b></b><b></b></a></r>',
             'multiple elements',
             'a', 1)
 
@@ -125,13 +125,13 @@ class TestMapperLoadingErrors(XMLMapperTestCase):
 
         self.assert_loading_error(
             mapper,
-            '<r><a><b></b><b></b></a></r>',
+            b'<r><a><b></b><b></b></a></r>',
             'multiple elements',
             'a', 1)
 
         self.assert_loading_error(
             mapper,
-            '<r><a><b>aoeu</b></a></r>',
+            b'<r><a><b>aoeu</b></a></r>',
             'Invalid literal for int: "aoeu"',
             'a', 1)
 
@@ -139,7 +139,7 @@ class TestMapperLoadingErrors(XMLMapperTestCase):
 class TestValueTypes(XMLMapperTestCase):
 
     def test_value_type_int(self):
-        xml = '<a id="10"><n>123</n></a>'
+        xml = b'<a id="10"><n>123</n></a>'
         mapper = XMLMapper([{
             '_type': 'a',
             '_match': '/a',
@@ -166,7 +166,7 @@ class TestValueTypes(XMLMapperTestCase):
                 'id_def': '@id',
                 'n_def': 'n',
             }],
-            '<a id="10"><n>123</n></a>'
+            b'<a id="10"><n>123</n></a>'
         )
         self.assertEqual(
             [{'_type': 'a', 'id': '10', 'n': '123',
@@ -187,9 +187,9 @@ class TestNestedMappings(XMLMapperTestCase):
                     'id': '@id'
                 }
             }],
-            '<r><a id="10"><b id="20"></b></a>'
-            '<a id="11"><b id="21"></b><b id="22"></b></a>'
-            '<a id="12"></a></r>'
+            b'<r><a id="10"><b id="20"></b></a>'
+            b'<a id="11"><b id="21"></b><b id="22"></b></a>'
+            b'<a id="12"></a></r>'
         )
         print(data)
         self.assertEqual(
@@ -205,7 +205,7 @@ class TestNestedMappings(XMLMapperTestCase):
 
 
 class TestManyToManyRelations(XMLMapperTestCase):
-    XML = """
+    XML = b"""
         <root>
             <alist>
                 <a id="10"></a>
@@ -273,14 +273,14 @@ class TestMapperReuse(XMLMapperTestCase):
         }])
 
         data = mapper.load(
-            '<a id="10"></a>',
+            b'<a id="10"></a>',
             JsonDumpFactory())
         self.assertEqual(
             [{'_type': 'a', 'id': '10'}],
             data)
 
         data2 = mapper.load(
-            '<a id="11"></a>',
+            b'<a id="11"></a>',
             JsonDumpFactory())
         self.assertEqual(
             [{'_type': 'a', 'id': '11'}],
@@ -301,7 +301,7 @@ class TestMapperReuse(XMLMapperTestCase):
         ])
 
         data = mapper.load(
-            '<r><a id="10"></a><b aid="10"></b></r>',
+            b'<r><a id="10"></a><b aid="10"></b></r>',
             JsonDumpFactory())
         self.assertEqual(
             [
@@ -311,5 +311,5 @@ class TestMapperReuse(XMLMapperTestCase):
 
         with self.assertRaises(XMLMapperLoadingError):
             mapper.load(
-                '<r><a id="11"></a><b aid="10"></b></r>',
+                b'<r><a id="11"></a><b aid="10"></b></r>',
                 JsonDumpFactory())

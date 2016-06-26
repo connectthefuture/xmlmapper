@@ -231,19 +231,29 @@ class XMLMapper:
         return self._XPathQuery(mapping_type, attr, q_type, q_xpath)
 
     def load(self, xml, object_factory):
-        """Parse XML and load objects according to spec.
+        """Parse XML bytes and load objects according to spec.
 
         Args:
-            xml: String or file-like object to get XML from.
+            xml: binary string (bytes) containing XML.
+            object_factory: `MapperObjectFactory` for creating objects.
+
+        Returns:
+            List of loaded objects as returned by `object_factory`.
+        """
+        return self.load_file(BytesIO(xml), object_factory)
+
+    def load_file(self, xml_file, object_factory):
+        """Parse XML file and load objects according to spec.
+
+        Args:
+            xml: file, file-like object, filename or url to get XML from.
             object_factory: `MapperObjectFactory` for creating objects.
 
         Returns:
             List of loaded objects as returned by `object_factory`.
         """
         parser = etree.XMLParser(remove_blank_text=True)
-        if isinstance(xml, six.string_types):
-            xml = BytesIO(xml)
-        root = etree.parse(xml, parser)
+        root = etree.parse(xml_file, parser)
         result = []
         state = self._State()
         for mapping in self._mappings:

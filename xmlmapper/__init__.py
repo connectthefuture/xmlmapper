@@ -1,2 +1,2 @@
-from xmlmapper import XMLMapper, XMLMapperSyntaxError, MapperObjectFactory, \
+from .xmlmapper import XMLMapper, XMLMapperSyntaxError, MapperObjectFactory, \
     XMLMapperLoadingError
