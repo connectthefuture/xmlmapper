@@ -98,7 +98,7 @@ class XMLMapper:
                 except ValueError:
                     raise XMLMapperLoadingError(
                         element,
-                        'Invalid literal for int: {}.'.format(str_value))
+                        'Invalid literal for int: "{}".'.format(str_value))
             else:
                 obj_id = self._get_string(element, self.xpath, value)
                 return state.get_object(element, self.value_type, obj_id)
@@ -166,6 +166,9 @@ class XMLMapper:
             raise XMLMapperSyntaxError(
                 'Duplicate mapping type "{}"'.format(mtype))
 
+        if not isinstance(mapping['_match'], six.string_types):
+            raise XMLMapperSyntaxError(
+                '"_match" should be a string in type "{}"'.format(mtype))
         match = self._compile_xpath(mapping['_match'])
 
         # Iterate and compile mapping attributes (ordered by name)

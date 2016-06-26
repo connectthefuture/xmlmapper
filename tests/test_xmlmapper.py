@@ -41,9 +41,9 @@ class TestMapperSyntaxErrors(XMLMapperTestCase):
         with six.assertRaisesRegex(
                 self, XMLMapperSyntaxError, '"_type" should be a string'):
             XMLMapper([{'_type': 12, '_match': 'a'}])
-        # with six.assertRaisesRegex(
-        #         self, MappingSyntaxError, '"Invalid query type"'):
-        #     XMLMapper([{'_type': 'a', '_match': 123}])
+        with six.assertRaisesRegex(
+                self, XMLMapperSyntaxError, '"_match" should be a string'):
+            XMLMapper([{'_type': 'a', '_match': 123}])
 
 
 class TestMapperLoadingErrors(XMLMapperTestCase):
