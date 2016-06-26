@@ -110,7 +110,8 @@ class XMLMapper:
             self.match, self.has_id, self.compiled = match, has_id, compiled
 
         def run(self, mapper, state, element, object_factory, result):
-            return mapper._load_mapping(element, self, object_factory, result)
+            return mapper._load_mapping(state, element, self,
+                                        object_factory, result)
 
     class _State:
         """Stores loaded objects while mapping."""
@@ -199,8 +200,7 @@ class XMLMapper:
         return etree.XPath(xpath, smart_strings=False)
 
     def _compile_query(self, mapping_type, attr, query):
-        # Parses and compiles attribute query spec:
-        # [type:] xpath
+        """Parses and compiles attribute query spec ([type:] xpath)"""
         q_match = self._RX_QUERY.match(query)
 
         if not q_match:
@@ -251,24 +251,32 @@ class XMLMapper:
         return result
 
     def _load_mapping(self, state, element, mapping, object_factory, result):
-        for element in mapping.match(element):
-
+        """Matches mapping and processes its attributes"""
+        objects = []
+        for match_el in mapping.match(element):
             # load attributes
             internal_data = {}
             data = {}
             for query in mapping.compiled:
-                value = query.run(self, state, element, object_factory, result)
+                value = query.run(self, state, match_el,
+                                  object_factory, result)
                 if query.attr.startswith('_'):
                     internal_data[query.attr] = value
                 else:
                     data[query.attr] = value
 
             obj = object_factory.create(mapping.mapping_type, data)
+            objects.append(obj)
+            result.append(obj)
 
             # add object to index if necessary
             if mapping.has_id:
                 assert '_id' in internal_data
                 state.add_object(
-                    element, mapping.mapping_type, internal_data['_id'], obj)
+                    match_el, mapping.mapping_type, internal_data['_id'], obj)
 
-            result.append(obj)
+        if not objects:
+            return None
+        elif len(objects) == 1:
+            return objects[0]
+        return objects

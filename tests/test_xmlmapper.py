@@ -6,13 +6,18 @@ from xmlmapper import MapperObjectFactory, XMLMapper, XMLMapperSyntaxError, \
 
 
 class JsonDumpFactory(MapperObjectFactory):
+
+    def _convert(self, value):
+        if isinstance(value, dict) and '_type' in value:
+            return (value['_type'], value['id'])
+        elif isinstance(value, list):
+            return [self._convert(x) for x in value]
+        return value
+
     def create(self, object_type, fields):
         obj = {'_type': object_type}
         for k, v in six.iteritems(fields):
-            if isinstance(v, dict) and '_type' in v:
-                obj[k] = (v['_type'], v['id'])
-            else:
-                obj[k] = v
+            obj[k] = self._convert(v)
         return obj
 
 
@@ -166,6 +171,36 @@ class TestValueTypes(XMLMapperTestCase):
         self.assertEqual(
             [{'_type': 'a', 'id': '10', 'n': '123',
               'id_def': '10', 'n_def': '123'}],
+            data)
+
+
+class TestNestedMappings(XMLMapperTestCase):
+    def test_nested_mappings(self):
+        data = self.load(
+            [{
+                '_type': 'a',
+                '_match': '/r/a',
+                'id': '@id',
+                'b': {
+                    '_type': 'b',
+                    '_match': './b',
+                    'id': '@id'
+                }
+            }],
+            '<r><a id="10"><b id="20"></b></a>'
+            '<a id="11"><b id="21"></b><b id="22"></b></a>'
+            '<a id="12"></a></r>'
+        )
+        print(data)
+        self.assertEqual(
+            [
+                {'_type': 'b', 'id': '20'},
+                {'_type': 'a', 'id': '10', 'b': ('b', '20')},
+                {'_type': 'b', 'id': '21'},
+                {'_type': 'b', 'id': '22'},
+                {'_type': 'a', 'id': '11', 'b': [('b', '21'), ('b', '22')]},
+                {'_type': 'a', 'id': '12', 'b': None},
+            ],
             data)
 
 
