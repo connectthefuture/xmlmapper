@@ -156,7 +156,7 @@ class XMLMapper:
         self._filters = filters or {}
         self._mappings = [self._compile_mapping(None, m) for m in mappings]
 
-    def _compile_mapping(self, attr, mapping, parent=None):
+    def _compile_mapping(self, attr, mapping):
         # Parses and compiles mapping spec (dict)
         # Required attributes: _type, _match
         if '_type' not in mapping:
@@ -186,7 +186,7 @@ class XMLMapper:
                 continue
 
             if isinstance(v, dict):
-                query = self._compile_mapping(k, v, mtype)
+                query = self._compile_mapping(k, v)
             elif isinstance(v, six.string_types):
                 query = self._compile_query(mtype, k, v)
             else:
@@ -207,10 +207,7 @@ class XMLMapper:
     def _compile_query(self, mapping_type, attr, query):
         """Parses and compiles attribute query spec ([type:] xpath)"""
         q_match = self._RX_QUERY.match(query)
-
-        if not q_match:
-            raise XMLMapperSyntaxError(
-                'Invalid query format: {}'.format(query))
+        assert q_match  # should always match since it has .*
 
         q_type = q_match.group('type')
         if q_type is None:
