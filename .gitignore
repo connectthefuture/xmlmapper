@@ -87,3 +87,9 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# Example django app database
+db.sqlite3
+
+# Coverage reports
+cover/
