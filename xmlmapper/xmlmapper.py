@@ -30,7 +30,7 @@ class XMLMapperLoadingError(XMLMapperError, RuntimeError):
 
     def __init__(self, element, message):
         if element is not None:
-            message += 'In element "{}" line {}.'.format(
+            message += ' In element "{}" line {}.'.format(
                 element.tag, element.sourceline)
         super(XMLMapperLoadingError, self).__init__(message)
         self.element_tag = element.tag
@@ -113,9 +113,11 @@ class XMLMapper:
 
     class _MappingQuery(_Query):
         """Mapping query, either primary or nested."""
-        def __init__(self, mapping_type, attr, match, has_id, compiled):
+        def __init__(self, mapping_type, attr, match, has_id,
+                     returns_list, compiled):
             XMLMapper._Query.__init__(self, mapping_type, attr)
-            self.match, self.has_id, self.compiled = match, has_id, compiled
+            self.match, self.has_id = match, has_id
+            self.returns_list, self.compiled = returns_list, compiled
 
         def run(self, mapper, state, element, object_factory, result):
             return mapper._load_mapping(state, element, self,
@@ -161,7 +163,7 @@ class XMLMapper:
         self._filters = filters or {}
         self._mappings = [self._compile_mapping(None, m) for m in mappings]
 
-    def _compile_mapping(self, attr, mapping):
+    def _compile_mapping(self, attr, mapping, returns_list=True):
         # Parses and compiles mapping spec (dict)
         # Required attributes: _type, _match
         if '_type' not in mapping:
@@ -191,7 +193,9 @@ class XMLMapper:
                 continue
 
             if isinstance(v, dict):
-                query = self._compile_mapping(k, v)
+                query = self._compile_mapping(k, v, False)
+            elif isinstance(v, list) and len(v) == 1:
+                query = self._compile_mapping(k, v[0], True)
             elif isinstance(v, six.string_types):
                 query = self._compile_query(mtype, k, v)
             else:
@@ -201,8 +205,8 @@ class XMLMapper:
             compiled.append(query)
 
         # Create mapping object and add it to types index
-        query_obj = self._MappingQuery(mtype, attr, match,
-                                       '_id' in mapping, compiled)
+        query_obj = self._MappingQuery(mtype, attr, match, '_id' in mapping,
+                                       returns_list, compiled)
         self._types[mtype] = query_obj
         return query_obj
 
@@ -292,4 +296,14 @@ class XMLMapper:
                 state.add_object(
                     match_el, mapping.mapping_type, internal_data['_id'], obj)
 
+        if not mapping.returns_list:
+            if len(objects) == 0:
+                return None
+            elif len(objects) == 1:
+                return objects[0]
+            else:
+                raise XMLMapperLoadingError(
+                    element,
+                    'Nested mapping returned more than one '
+                    'object ({}).'.format(len(objects)))
         return objects

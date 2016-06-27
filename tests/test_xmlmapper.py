@@ -56,6 +56,9 @@ class TestMapperSyntaxErrors(XMLMapperTestCase):
                 self, XMLMapperSyntaxError, 'Invalid query type'):
             XMLMapper([{'_type': 'a', '_match': 'a', 'b': 123}])
         with six.assertRaisesRegex(
+                self, XMLMapperSyntaxError, 'Invalid query type'):
+            XMLMapper([{'_type': 'a', '_match': 'a', 'b': []}])
+        with six.assertRaisesRegex(
                 self, XMLMapperSyntaxError, 'Unknown value type'):
             XMLMapper([{'_type': 'a', '_match': 'a', 'b': 'b: test'}])
         with six.assertRaisesRegex(
@@ -146,6 +149,21 @@ class TestMapperLoadingErrors(XMLMapperTestCase):
             mapper,
             b'<r><a><b>aoeu</b></a></r>',
             'Invalid literal for int: "aoeu"',
+            'a', 1)
+
+    def test_mapper_loading_nested_errors(self):
+        mapper = XMLMapper([{
+            '_type': 'a',
+            '_match': '/a',
+            'b': {
+                '_type': 'b',
+                '_match': 'b',
+            }
+        }])
+        self.assert_loading_error(
+            mapper,
+            b'<a><b /><b /></a>',
+            'returned more than one',
             'a', 1)
 
 
@@ -248,25 +266,32 @@ class TestNestedMappings(XMLMapperTestCase):
                 '_type': 'a',
                 '_match': '/r/a',
                 'id': '@id',
-                'b': {
+                'b': [{
                     '_type': 'b',
-                    '_match': './b',
+                    '_match': 'b',
                     'id': '@id'
+                }],
+                'c': {
+                    '_type': 'c',
+                    '_match': 'c',
+                    'id': '@id',
                 }
             }],
             b'<r><a id="10"><b id="20"></b></a>'
             b'<a id="11"><b id="21"></b><b id="22"></b></a>'
-            b'<a id="12"></a></r>'
+            b'<a id="12"><c id="31"></c></a></r>'
         )
         print(data)
         self.assertEqual(
             [
                 {'_type': 'b', 'id': '20'},
-                {'_type': 'a', 'id': '10', 'b': [('b', '20')]},
+                {'_type': 'a', 'id': '10', 'b': [('b', '20')], 'c': None},
                 {'_type': 'b', 'id': '21'},
                 {'_type': 'b', 'id': '22'},
-                {'_type': 'a', 'id': '11', 'b': [('b', '21'), ('b', '22')]},
-                {'_type': 'a', 'id': '12', 'b': []},
+                {'_type': 'a', 'id': '11', 'b': [('b', '21'), ('b', '22')],
+                    'c': None},
+                {'_type': 'c', 'id': '31'},
+                {'_type': 'a', 'id': '12', 'b': [], 'c': ('c', '31')},
             ],
             data)
 
