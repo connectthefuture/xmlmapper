@@ -405,3 +405,44 @@ class TestMapperReuse(XMLMapperTestCase):
             mapper.load(
                 b'<r><a id="11"></a><b aid="10"></b></r>',
                 JsonDumpFactory())
+
+
+class TestExampleFromClassDocstring(XMLMapperTestCase):
+    def test_example_from_class_docstring(self):
+        data = self.load(
+            [{
+                "_type": "a",
+                "_match": "/r/a",
+                "_id": "@id",
+                "id": "@id",
+                "title": "title",
+                "b_list": [{
+                    "_type": "b",
+                    "_match": "b",
+                    "id": "int: id/@value"
+                }]
+            }, {
+                "_type": "c",
+                "_match": "/r/c",
+                "a": "a: @aid",
+            }],
+            b'''
+            <r>
+                <a id="1">
+                    <title>a1</title>
+                    <b>
+                        <id value="42"/>
+                    </b>
+                </a>
+                <c aid="1"/>
+            </r>'''
+        )
+        self.assertEqual(
+            [
+                {'_type': 'b', 'id': 42},
+                {'_type': 'a', 'id': '1',
+                    'title': 'a1', 'b_list': [('b', 42)]},
+                {'_type': 'c', 'a': ('a', '1')}
+            ],
+            data
+        )
