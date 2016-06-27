@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='xmlmapper',
-    version='0.1',
+    version='0.2',
     url='https://github.com/ldpl/xmlmapper',
     author='Pavel Stupnikov',
     author_email='pavel.stupnikov@gmail.com',
