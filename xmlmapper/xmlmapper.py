@@ -59,7 +59,12 @@ class XMLMapper:
     """
 
     _RX_QUERY = re.compile(r'(?:(?P<type>\w+)\s*:\s*)?(?P<xpath>.*)')
-    _VALUE_TYPES = ('string', 'int')
+    _VALUE_TYPES = {
+        'string': str,
+        'int': int,
+        'float': float,
+        'bool': lambda v: v is True or v.lower() == 'true',
+    }
 
     class _Query:
         def __init__(self, mapping_type, attr):
@@ -87,24 +92,24 @@ class XMLMapper:
 
         def run(self, mapper, state, element, object_factory, result):
             value = self.xpath(element)
+            str_value = self._get_string(element, self.xpath, value)
             if self.value_type == 'string':
-                return self._get_string(element, self.xpath, value)
-            elif self.value_type == 'int':
-                str_value = self._get_string(element, self.xpath, value)
+                return str_value
+            elif self.value_type in mapper._VALUE_TYPES:
                 if str_value is None:
                     return None
+                type_conv = mapper._VALUE_TYPES[self.value_type]
                 try:
-                    return int(str_value)
+                    return type_conv(str_value)
                 except ValueError:
                     raise XMLMapperLoadingError(
                         element,
-                        'Invalid literal for int: "{}".'.format(str_value))
+                        'Invalid literal for {}: "{}".'.format(
+                            self.value_type, str_value))
             elif self.value_type in mapper._filters:
-                str_value = self._get_string(element, self.xpath, value)
                 return mapper._filters[self.value_type](str_value)
             else:
-                obj_id = self._get_string(element, self.xpath, value)
-                return state.get_object(element, self.value_type, obj_id)
+                return state.get_object(element, self.value_type, str_value)
 
     class _MappingQuery(_Query):
         """Mapping query, either primary or nested."""

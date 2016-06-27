@@ -186,6 +186,38 @@ class TestValueTypes(XMLMapperTestCase):
               'id_def': '10', 'n_def': '123'}],
             data)
 
+    def test_value_type_bool(self):
+        data = self.load(
+            [{
+                '_type': 'a',
+                '_match': '/a',
+                'b': 'bool: @b',
+                'n': 'bool: boolean(n)',
+                'no_attr': 'bool: @noattr',
+                'no_el': 'bool: no_el',
+            }],
+            b'<a b="false"><n>true</n></a>')
+        self.assertEqual(
+            [{'_type': 'a', 'b': False, 'n': True,
+              'no_attr': None, 'no_el': None}],
+            data)
+
+    def test_value_type_float(self):
+        data = self.load(
+            [{
+                '_type': 'a',
+                '_match': '/a',
+                'b': 'float: @b',
+                'n': 'float: n',
+                'no_attr': 'float: @noattr',
+                'no_el': 'float: no_el',
+            }],
+            b'<a b="43"><n>123.4</n></a>')
+        self.assertAlmostEqual(
+            [{'_type': 'a', 'b': 43, 'n': 123.4,
+              'no_attr': None, 'no_el': None}],
+            data)
+
 
 class TestCustomFilters(XMLMapperTestCase):
 
