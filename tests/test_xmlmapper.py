@@ -22,8 +22,8 @@ class JsonDumpFactory(MapperObjectFactory):
 
 
 class XMLMapperTestCase(TestCase):
-    def load(self, mapping, xml):
-        mapper = XMLMapper(mapping)
+    def load(self, mapping, xml, filters=None):
+        mapper = XMLMapper(mapping, filters=filters)
         return mapper.load(xml, JsonDumpFactory())
 
 
@@ -171,6 +171,28 @@ class TestValueTypes(XMLMapperTestCase):
         self.assertEqual(
             [{'_type': 'a', 'id': '10', 'n': '123',
               'id_def': '10', 'n_def': '123'}],
+            data)
+
+
+class TestCustomFilters(XMLMapperTestCase):
+
+    def test_custom_filters(self):
+        data = self.load(
+            [{
+                '_type': 'a',
+                '_match': '/a',
+                'foo': 'foo: @foo',
+                'bar': 'bar: @bar',
+            }],
+            b'<a foo="x" bar="10"></a>',
+            filters={
+                'foo': lambda val: '+{}+'.format(val),
+                'bar': lambda val: int(val) + 1,
+            }
+        )
+
+        self.assertEqual(
+            [{'_type': 'a', 'foo': '+x+', 'bar': 11}],
             data)
 
 
